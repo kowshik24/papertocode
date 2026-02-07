@@ -1,0 +1,5 @@
+{
+  "name": "paperTocode",
+  "description": "Transform academic research papers into runnable, pedagogical Jupyter notebooks that explain algorithms through code.",
+  "requestFramePermissions": []
+}
