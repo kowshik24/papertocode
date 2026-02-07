@@ -157,7 +157,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, onChange, disabled })
               <select
                 value={config.provider}
                 disabled={disabled}
-                onChange={(e) => onChange({ ...config, provider: e.target.value as AIProvider, apiKey: '', ollamaEndpoint: e.target.value === 'ollama' ? 'http://localhost:11434' : undefined })}
+                onChange={(e) => onChange({ ...config, provider: e.target.value as AIProvider, apiKey: '', ollamaEndpoint: e.target.value === 'ollama' ? 'http://localhost:11434' : undefined, maxTokens: config.maxTokens || 4096, temperature: config.temperature ?? 0.3 })}
                 className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none appearance-none transition-shadow cursor-pointer hover:bg-slate-100"
               >
                 <option value="gemini">Google Gemini</option>
@@ -298,6 +298,58 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, onChange, disabled })
                 : 'Your key is used directly in your browser to fetch models and generate content. It is never stored.'
               }
             </p>
+          </div>
+
+          {/* Advanced Parameters */}
+          <div className="md:col-span-2 pt-2 border-t border-slate-100">
+            <div className="flex items-center gap-2 mb-3">
+              <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+              </svg>
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Generation Parameters</span>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-slate-600 ml-1 flex justify-between">
+                  <span>Max Tokens</span>
+                  <span className="text-slate-400 font-normal">{config.maxTokens || 4096}</span>
+                </label>
+                <input
+                  type="range"
+                  min="1024"
+                  max="8192"
+                  step="512"
+                  value={config.maxTokens || 4096}
+                  disabled={disabled}
+                  onChange={(e) => onChange({ ...config, maxTokens: parseInt(e.target.value) })}
+                  className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                />
+                <div className="flex justify-between text-[10px] text-slate-400 px-1">
+                  <span>1024</span>
+                  <span>8192</span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-slate-600 ml-1 flex justify-between">
+                  <span>Temperature</span>
+                  <span className="text-slate-400 font-normal">{(config.temperature ?? 0.3).toFixed(1)}</span>
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={config.temperature ?? 0.3}
+                  disabled={disabled}
+                  onChange={(e) => onChange({ ...config, temperature: parseFloat(e.target.value) })}
+                  className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                />
+                <div className="flex justify-between text-[10px] text-slate-400 px-1">
+                  <span>Precise</span>
+                  <span>Creative</span>
+                </div>
+              </div>
+            </div>
           </div>
 
         </div>

@@ -19,7 +19,9 @@ const App: React.FC = () => {
   const [aiConfig, setAiConfig] = useState<AIConfig>({
     provider: 'gemini',
     model: 'gemini-2.0-flash',
-    apiKey: ''
+    apiKey: '',
+    maxTokens: 4096,
+    temperature: 0.3
   });
 
   const handleFileSelect = async (file: File) => {
@@ -82,11 +84,11 @@ const App: React.FC = () => {
       <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="bg-gradient-to-br from-blue-600 to-blue-700 p-2 rounded-lg shadow-md hover:shadow-lg transition-shadow">
-              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C6.5 6.253 2 10.753 2 16.253s4.5 10 10 10 10-4.5 10-10S17.5 6.253 12 6.253z" />
-              </svg>
-            </div>
+            <img 
+              src="/logo/logo.png" 
+              alt="PaperToCode Logo" 
+              className="w-10 h-10 rounded-lg shadow-md hover:shadow-lg transition-shadow"
+            />
             <div>
               <h1 className="font-bold text-xl text-slate-900 tracking-tight">PaperToCode</h1>
               <p className="text-xs text-slate-500">Transform Research into Notebooks</p>

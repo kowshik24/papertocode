@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo/logo.png" alt="PaperToCode Logo" width="120" />
+</p>
+
 # PaperToCode
 
 A browser-based tool that transforms academic research papers into runnable Jupyter notebooks. Upload a PDF and get an educational implementation that demonstrates the paper's core algorithms using simplified, CPU-friendly code.

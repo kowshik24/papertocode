@@ -302,8 +302,8 @@ const callOpenAI = async (systemPrompt: string, userPrompt: string, config: AICo
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt }
       ],
-      temperature: 0.3,
-      max_tokens: 8192
+      temperature: config.temperature ?? 0.3,
+      max_tokens: config.maxTokens || 4096
     })
   });
 
@@ -317,6 +317,10 @@ const callOpenAI = async (systemPrompt: string, userPrompt: string, config: AICo
 };
 
 const callAnthropic = async (systemPrompt: string, userPrompt: string, config: AIConfig): Promise<string> => {
+  // Determine max tokens - respect model limits (Claude 3 non-3.5 maxes at 4096)
+  const modelMaxTokens = config.model.includes('3-5') || config.model.includes('3.5') ? 8192 : 4096;
+  const maxTokens = Math.min(config.maxTokens || 4096, modelMaxTokens);
+  
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -327,7 +331,8 @@ const callAnthropic = async (systemPrompt: string, userPrompt: string, config: A
     },
     body: JSON.stringify({
       model: config.model,
-      max_tokens: 8192,
+      max_tokens: maxTokens,
+      temperature: config.temperature ?? 0.3,
       system: systemPrompt,
       messages: [{ role: "user", content: userPrompt }]
     })
@@ -355,8 +360,8 @@ const callGroq = async (systemPrompt: string, userPrompt: string, config: AIConf
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt }
       ],
-      temperature: 0.3,
-      max_tokens: 8192
+      temperature: config.temperature ?? 0.3,
+      max_tokens: config.maxTokens || 8192
     })
   });
 
@@ -403,8 +408,8 @@ const callHuggingFace = async (systemPrompt: string, userPrompt: string, config:
     body: JSON.stringify({
       inputs: `${systemPrompt}\n\nUser: ${userPrompt}\n\nAssistant:`,
       parameters: {
-        max_new_tokens: 4096,
-        temperature: 0.3,
+        max_new_tokens: config.maxTokens || 4096,
+        temperature: config.temperature ?? 0.3,
         return_full_text: false
       }
     })

@@ -144,8 +144,8 @@ const generateOpenAI = async (file: File, config: AIConfig): Promise<GeneratedCo
       model: config.model,
       messages,
       response_format: { type: "json_object" },
-      temperature: 0.2,
-      max_tokens: 4096
+      temperature: config.temperature ?? 0.3,
+      max_tokens: config.maxTokens || 4096
     })
   });
 
@@ -195,8 +195,8 @@ const generateOpenAIWithText = async (textContent: string, config: AIConfig): Pr
         }
       ],
       response_format: { type: "json_object" },
-      temperature: 0.2,
-      max_tokens: 4096
+      temperature: config.temperature ?? 0.3,
+      max_tokens: config.maxTokens || 4096
     })
   });
 
@@ -253,6 +253,10 @@ const generateAnthropic = async (file: File, config: AIConfig): Promise<Generate
     ];
   }
   
+  // Determine max tokens - respect model limits (Claude 3 non-3.5 maxes at 4096)
+  const modelMaxTokens = config.model.includes('3-5') || config.model.includes('3.5') ? 8192 : 4096;
+  const maxTokens = Math.min(config.maxTokens || 4096, modelMaxTokens);
+  
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -263,7 +267,8 @@ const generateAnthropic = async (file: File, config: AIConfig): Promise<Generate
     },
     body: JSON.stringify({
       model: config.model,
-      max_tokens: 8192,
+      max_tokens: maxTokens,
+      temperature: config.temperature ?? 0.3,
       system: SYSTEM_INSTRUCTION,
       messages: [
         { role: "user", content }
@@ -357,8 +362,8 @@ const generateGroq = async (file: File, config: AIConfig): Promise<GeneratedCont
         }
       ],
       response_format: { type: "json_object" },
-      temperature: 0.2,
-      max_tokens: 8192
+      temperature: config.temperature ?? 0.3,
+      max_tokens: config.maxTokens || 8192
     })
   });
 
@@ -433,8 +438,8 @@ const generateHuggingFace = async (file: File, config: AIConfig): Promise<Genera
     body: JSON.stringify({
       inputs: prompt,
       parameters: {
-        max_new_tokens: 4096,
-        temperature: 0.2,
+        max_new_tokens: config.maxTokens || 4096,
+        temperature: config.temperature ?? 0.3,
         return_full_text: false
       }
     })

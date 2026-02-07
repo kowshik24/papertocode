@@ -49,6 +49,8 @@ export interface AIConfig {
   model: string;
   apiKey: string;
   ollamaEndpoint?: string; // For Ollama provider
+  maxTokens: number;
+  temperature: number;
 }
 
 export interface PaperMetadata {
