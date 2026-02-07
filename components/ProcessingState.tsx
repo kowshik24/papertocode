@@ -1,6 +1,17 @@
 import React, { useEffect, useState } from 'react';
 
-const steps = [
+interface MultiStepProgress {
+  currentStep: number;
+  totalSteps: number;
+  stepName: string;
+  message: string;
+}
+
+interface ProcessingStateProps {
+  progress?: MultiStepProgress | null;
+}
+
+const animatedSteps = [
   { icon: '📄', text: 'Reading research paper...' },
   { icon: '🔍', text: 'Extracting core algorithms...' },
   { icon: '🏗️', text: 'Designing toy components...' },
@@ -10,15 +21,31 @@ const steps = [
   { icon: '✨', text: 'Adding visualizations & explanations...' }
 ];
 
-const ProcessingState: React.FC = () => {
-  const [currentStep, setCurrentStep] = useState(0);
+const multiStepStages = [
+  { icon: '📄', name: 'Preparation', text: 'Extracting text and metadata...' },
+  { icon: '🔍', name: 'Analysis', text: 'Analyzing paper structure...' },
+  { icon: '🏗️', name: 'Design', text: 'Designing toy architecture...' },
+  { icon: '💻', name: 'Code Generation', text: 'Generating notebook code...' }
+];
+
+const ProcessingState: React.FC<ProcessingStateProps> = ({ progress }) => {
+  const [animatedStep, setAnimatedStep] = useState(0);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentStep((prev) => (prev + 1) % steps.length);
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
+    if (!progress) {
+      const interval = setInterval(() => {
+        setAnimatedStep((prev) => (prev + 1) % animatedSteps.length);
+      }, 2000);
+      return () => clearInterval(interval);
+    }
+  }, [progress]);
+
+  // Use multi-step progress if available
+  const isMultiStep = progress !== null && progress !== undefined;
+  const currentStepIndex = isMultiStep ? progress.currentStep : animatedStep;
+  const steps = isMultiStep ? multiStepStages : animatedSteps;
+  const currentMessage = isMultiStep ? progress.message : animatedSteps[animatedStep].text;
+  const stepName = isMultiStep ? progress.stepName : `Step ${animatedStep + 1}`;
 
   return (
     <div className="w-full max-w-2xl mx-auto py-16">
@@ -31,20 +58,22 @@ const ProcessingState: React.FC = () => {
           <div className="absolute inset-2 rounded-full border-2 border-blue-200 animate-pulse"></div>
           {/* Inner static icon */}
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-4xl">{steps[currentStep].icon}</span>
+            <span className="text-4xl">{steps[Math.min(currentStepIndex, steps.length - 1)]?.icon || '⚙️'}</span>
           </div>
         </div>
       </div>
 
       {/* Main Status Text */}
       <div className="text-center mb-8">
-        <h3 className="text-2xl font-bold text-slate-900 mb-3">Processing Paper</h3>
+        <h3 className="text-2xl font-bold text-slate-900 mb-3">
+          {isMultiStep ? `Step ${progress.currentStep + 1}: ${stepName}` : 'Processing Paper'}
+        </h3>
         <div className="h-10 flex items-center justify-center">
           <p 
-            key={currentStep}
+            key={currentStepIndex}
             className="text-lg text-slate-600 font-medium animate-fade-in-out transition-opacity duration-500"
           >
-            {steps[currentStep].text}
+            {currentMessage}
           </p>
         </div>
       </div>
@@ -56,15 +85,22 @@ const ProcessingState: React.FC = () => {
             <div key={index} className="flex-1 flex flex-col items-center gap-2">
               <div
                 className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold text-sm transition-all duration-300 ${
-                  index < currentStep
+                  index < currentStepIndex
                     ? 'bg-green-500 text-white scale-100'
-                    : index === currentStep
+                    : index === currentStepIndex
                     ? 'bg-blue-600 text-white scale-110 shadow-lg'
                     : 'bg-slate-200 text-slate-600 scale-100'
                 }`}
               >
-                {index < currentStep ? '✓' : index + 1}
+                {index < currentStepIndex ? '✓' : index + 1}
               </div>
+              {isMultiStep && (
+                <span className={`text-xs font-medium ${
+                  index === currentStepIndex ? 'text-blue-600' : 'text-slate-500'
+                }`}>
+                  {step.name}
+                </span>
+              )}
             </div>
           ))}
         </div>
@@ -77,33 +113,36 @@ const ProcessingState: React.FC = () => {
             <div
               key={index}
               className={`flex items-center gap-3 p-3 rounded-lg transition-all duration-300 ${
-                index === currentStep
+                index === currentStepIndex
                   ? 'bg-blue-50 border border-blue-200'
-                  : index < currentStep
+                  : index < currentStepIndex
                   ? 'bg-green-50 border border-green-200'
                   : 'bg-slate-50 border border-slate-200'
               }`}
             >
-              <div className={`text-xl ${index <= currentStep ? 'animate-bounce' : ''}`}>
+              <div className={`text-xl ${index <= currentStepIndex ? 'animate-bounce' : ''}`}>
                 {step.icon}
               </div>
               <div className="flex-1">
                 <p
                   className={`font-medium ${
-                    index === currentStep
+                    index === currentStepIndex
                       ? 'text-blue-900 font-semibold'
-                      : index < currentStep
+                      : index < currentStepIndex
                       ? 'text-green-900 line-through opacity-60'
                       : 'text-slate-600'
                   }`}
                 >
-                  {step.text}
+                  {isMultiStep ? step.name : step.text}
                 </p>
+                {isMultiStep && (
+                  <p className="text-sm text-slate-500">{step.text}</p>
+                )}
               </div>
-              {index < currentStep && (
+              {index < currentStepIndex && (
                 <div className="text-green-600 font-bold">✓</div>
               )}
-              {index === currentStep && (
+              {index === currentStepIndex && (
                 <div className="w-4 h-4 rounded-full border-2 border-blue-600 border-t-blue-200 animate-spin"></div>
               )}
             </div>
@@ -114,16 +153,24 @@ const ProcessingState: React.FC = () => {
       {/* Timing Info */}
       <div className="text-center space-y-2">
         <p className="text-sm text-slate-600 font-medium">
-          Step {currentStep + 1} of {steps.length}
+          {isMultiStep 
+            ? `Step ${progress.currentStep + 1} of ${progress.totalSteps + 1}` 
+            : `Step ${currentStepIndex + 1} of ${steps.length}`}
         </p>
         <p className="text-xs text-slate-500">
-          ⏱️ This usually takes 30-90 seconds with a good API connection
+          {isMultiStep 
+            ? '⏱️ Multi-step generation may take 1-3 minutes for best results'
+            : '⏱️ This usually takes 30-90 seconds with a good API connection'}
         </p>
         <div className="mt-4">
           <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
             <div
               className="bg-gradient-to-r from-blue-500 to-blue-600 h-full transition-all duration-300 ease-out"
-              style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
+              style={{ 
+                width: isMultiStep 
+                  ? `${((progress.currentStep + 1) / (progress.totalSteps + 1)) * 100}%`
+                  : `${((currentStepIndex + 1) / steps.length) * 100}%`
+              }}
             ></div>
           </div>
         </div>

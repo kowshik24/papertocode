@@ -4,12 +4,18 @@ import ProcessingState from './components/ProcessingState';
 import ResultView from './components/ResultView';
 import ConfigPanel from './components/ConfigPanel';
 import { generateToyImplementation } from './services/geminiService';
-import { AppState, GeneratedContent, GenerationError, AIConfig } from './types';
+import { generateMultiStep, MultiStepProgress, AnalysisResult, DesignResult } from './services/orchestratorService';
+import { AppState, GeneratedContent, GenerationError, AIConfig, EnrichedDocument } from './types';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
   const [content, setContent] = useState<GeneratedContent | null>(null);
   const [error, setError] = useState<GenerationError | null>(null);
+  const [useMultiStep, setUseMultiStep] = useState<boolean>(true);
+  const [progress, setProgress] = useState<MultiStepProgress | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [designResult, setDesignResult] = useState<DesignResult | null>(null);
+  const [enrichedDoc, setEnrichedDoc] = useState<EnrichedDocument | null>(null);
   const [aiConfig, setAiConfig] = useState<AIConfig>({
     provider: 'gemini',
     model: 'gemini-2.0-flash',
@@ -17,7 +23,8 @@ const App: React.FC = () => {
   });
 
   const handleFileSelect = async (file: File) => {
-    if (!aiConfig.apiKey.trim()) {
+    // Check API key (except for Ollama which doesn't need one)
+    if (!aiConfig.apiKey.trim() && aiConfig.provider !== 'ollama') {
       setError({
         message: `Please enter your ${aiConfig.provider} API Key first.`,
         details: 'No API key detected in configuration.'
@@ -28,9 +35,26 @@ const App: React.FC = () => {
 
     setAppState(AppState.PROCESSING);
     setError(null);
+    setProgress(null);
+    setAnalysisResult(null);
+    setDesignResult(null);
+    setEnrichedDoc(null);
+
     try {
-      const result = await generateToyImplementation(file, aiConfig);
-      setContent(result);
+      if (useMultiStep) {
+        // Multi-step generation with progress tracking
+        const result = await generateMultiStep(file, aiConfig, (p) => {
+          setProgress(p);
+        });
+        setContent(result.content);
+        setAnalysisResult(result.analysis);
+        setDesignResult(result.design);
+        setEnrichedDoc(result.enrichedDoc);
+      } else {
+        // Single-step generation (original behavior)
+        const result = await generateToyImplementation(file, aiConfig);
+        setContent(result);
+      }
       setAppState(AppState.COMPLETE);
     } catch (err: any) {
       console.error(err);
@@ -46,6 +70,10 @@ const App: React.FC = () => {
     setAppState(AppState.IDLE);
     setContent(null);
     setError(null);
+    setProgress(null);
+    setAnalysisResult(null);
+    setDesignResult(null);
+    setEnrichedDoc(null);
   };
 
   return (
@@ -97,10 +125,31 @@ const App: React.FC = () => {
                 config={aiConfig} 
                 onChange={setAiConfig} 
               />
+              
+              {/* Generation Mode Toggle */}
+              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200">
+                <div>
+                  <h4 className="font-semibold text-slate-800">Multi-Step Generation</h4>
+                  <p className="text-sm text-slate-600">Analyze → Design → Generate (better quality, takes longer)</p>
+                </div>
+                <button
+                  onClick={() => setUseMultiStep(!useMultiStep)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    useMultiStep ? 'bg-blue-600' : 'bg-slate-300'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      useMultiStep ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+              
               <div className="border-t border-slate-100 pt-8">
                 <FileUpload 
                   onFileSelect={handleFileSelect} 
-                  disabled={!aiConfig.apiKey}
+                  disabled={!aiConfig.apiKey && aiConfig.provider !== 'ollama'}
                 />
               </div>
             </div>
@@ -145,11 +194,17 @@ const App: React.FC = () => {
         )}
 
         {appState === AppState.PROCESSING && (
-          <ProcessingState />
+          <ProcessingState progress={progress} />
         )}
 
         {appState === AppState.COMPLETE && content && (
-          <ResultView content={content} onReset={handleReset} />
+          <ResultView 
+            content={content} 
+            onReset={handleReset}
+            analysis={analysisResult}
+            design={designResult}
+            enrichedDoc={enrichedDoc}
+          />
         )}
 
         {appState === AppState.ERROR && (
@@ -196,7 +251,7 @@ const App: React.FC = () => {
             </div>
             <div>
               <h4 className="font-semibold text-white mb-2">Supported Providers</h4>
-              <p className="text-sm">Google Gemini, OpenAI, Anthropic Claude</p>
+              <p className="text-sm">Gemini, OpenAI, Anthropic, Groq, Ollama, HuggingFace</p>
             </div>
             <div>
               <h4 className="font-semibold text-white mb-2">Note</h4>

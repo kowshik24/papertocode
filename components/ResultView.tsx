@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
-import { GeneratedContent } from '../types';
+import { GeneratedContent, EnrichedDocument } from '../types';
 import { createNotebookBlob } from '../services/geminiService';
+import { AnalysisResult, DesignResult } from '../services/orchestratorService';
 
 interface ResultViewProps {
   content: GeneratedContent;
   onReset: () => void;
+  analysis?: AnalysisResult | null;
+  design?: DesignResult | null;
+  enrichedDoc?: EnrichedDocument | null;
 }
 
 const CodeBlock: React.FC<{ source: string }> = ({ source }) => {
@@ -72,8 +76,9 @@ const CodeBlock: React.FC<{ source: string }> = ({ source }) => {
   );
 };
 
-const ResultView: React.FC<ResultViewProps> = ({ content, onReset }) => {
+const ResultView: React.FC<ResultViewProps> = ({ content, onReset, analysis, design, enrichedDoc }) => {
   const [expandedCells, setExpandedCells] = useState<Set<number>>(new Set([0, 1]));
+  const [showInsights, setShowInsights] = useState(false);
 
   const handleDownload = () => {
     const blob = createNotebookBlob(content.cells);
@@ -124,6 +129,95 @@ const ResultView: React.FC<ResultViewProps> = ({ content, onReset }) => {
           </button>
         </div>
       </div>
+
+      {/* Paper Insights (shown when multi-step generation was used) */}
+      {(analysis || design || enrichedDoc) && (
+        <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden">
+          <button
+            onClick={() => setShowInsights(!showInsights)}
+            className="w-full px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-purple-50 to-blue-50 flex items-center justify-between hover:from-purple-100 hover:to-blue-100 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              <h2 className="text-lg font-bold text-slate-800">🧠 Paper Analysis Insights</h2>
+            </div>
+            <svg className={`w-5 h-5 text-slate-500 transition-transform ${showInsights ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          
+          {showInsights && (
+            <div className="p-6 space-y-6">
+              {/* Paper Metadata */}
+              {enrichedDoc && (
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-slate-700 flex items-center gap-2">
+                    <span className="text-blue-500">📄</span> Paper Info
+                  </h3>
+                  <div className="bg-slate-50 rounded-lg p-4 text-sm">
+                    <p><strong>Title:</strong> {enrichedDoc.metadata.title}</p>
+                    <p><strong>Domain:</strong> <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">{enrichedDoc.metadata.estimatedDomain}</span></p>
+                    {enrichedDoc.metadata.abstract && (
+                      <p className="mt-2"><strong>Abstract:</strong> {enrichedDoc.metadata.abstract.substring(0, 300)}...</p>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {/* Analysis Results */}
+              {analysis && (
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-slate-700 flex items-center gap-2">
+                    <span className="text-green-500">🔍</span> Analysis Results
+                  </h3>
+                  <div className="bg-green-50 rounded-lg p-4 text-sm space-y-2">
+                    <p><strong>Intent:</strong> {analysis.intent}</p>
+                    <p><strong>Novelty:</strong> {analysis.novelty}</p>
+                    <p><strong>Complexity:</strong> <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      analysis.complexity === 'Simple' ? 'bg-green-200 text-green-800' :
+                      analysis.complexity === 'Moderate' ? 'bg-yellow-200 text-yellow-800' :
+                      'bg-red-200 text-red-800'
+                    }`}>{analysis.complexity}</span></p>
+                    <p><strong>Core Algorithms:</strong></p>
+                    <div className="flex flex-wrap gap-2">
+                      {analysis.core_algorithms.map((algo, i) => (
+                        <span key={i} className="px-2 py-1 bg-green-200 text-green-800 rounded text-xs">{algo}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Design Results */}
+              {design && (
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-slate-700 flex items-center gap-2">
+                    <span className="text-purple-500">🏗️</span> Toy Design
+                  </h3>
+                  <div className="bg-purple-50 rounded-lg p-4 text-sm space-y-3">
+                    <p><strong>Architecture:</strong> {design.toy_architecture}</p>
+                    <p><strong>Expected Behavior:</strong> {design.expected_behavior}</p>
+                    {design.simplifications.length > 0 && (
+                      <>
+                        <p><strong>Simplifications:</strong></p>
+                        <div className="space-y-1">
+                          {design.simplifications.slice(0, 3).map((s, i) => (
+                            <div key={i} className="text-xs bg-white p-2 rounded border border-purple-200">
+                              <span className="text-purple-700">{s.original}</span> → <span className="text-green-700">{s.simplified}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Execution Guide */}
       <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden">

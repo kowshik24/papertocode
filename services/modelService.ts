@@ -1,4 +1,7 @@
 import { AIModel, AIProvider } from "../types";
+import { GROQ_MODELS, fetchGroqModels } from "./groqService";
+import { OLLAMA_FALLBACK_MODELS, fetchOllamaModels } from "./ollamaService";
+import { HUGGINGFACE_MODELS, fetchHuggingFaceModels } from "./huggingfaceService";
 
 export const FALLBACK_MODELS: Record<AIProvider, AIModel[]> = {
   gemini: [
@@ -17,11 +20,18 @@ export const FALLBACK_MODELS: Record<AIProvider, AIModel[]> = {
     { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet' },
     { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus' },
     { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku' }
-  ]
+  ],
+  groq: GROQ_MODELS,
+  ollama: OLLAMA_FALLBACK_MODELS,
+  huggingface: HUGGINGFACE_MODELS
 };
 
-export const fetchModels = async (provider: AIProvider, apiKey: string): Promise<AIModel[]> => {
-  if (!apiKey) return FALLBACK_MODELS[provider];
+export const fetchModels = async (
+  provider: AIProvider, 
+  apiKey: string, 
+  ollamaEndpoint?: string
+): Promise<AIModel[]> => {
+  if (!apiKey && provider !== 'ollama') return FALLBACK_MODELS[provider];
 
   try {
     switch (provider) {
@@ -31,6 +41,12 @@ export const fetchModels = async (provider: AIProvider, apiKey: string): Promise
         return await fetchOpenAIModels(apiKey);
       case 'anthropic':
         return await fetchAnthropicModels(apiKey);
+      case 'groq':
+        return await fetchGroqModels(apiKey);
+      case 'ollama':
+        return await fetchOllamaModels(ollamaEndpoint);
+      case 'huggingface':
+        return await fetchHuggingFaceModels(apiKey);
       default:
         return FALLBACK_MODELS[provider];
     }
