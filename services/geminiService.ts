@@ -1,7 +1,8 @@
-import { GoogleGenAI, Type, Schema } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { SYSTEM_INSTRUCTION } from "../constants";
 import { GeneratedContent, NotebookCell, AIConfig } from "../types";
 import { extractTextFromPdf } from "./pdfService";
+import { withRetry } from "../utils/retry";
 
 const processFileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -40,31 +41,42 @@ const extractAndValidateText = async (file: File): Promise<string> => {
   return textContent;
 };
 
-const notebookSchema: Schema = {
-  type: Type.OBJECT,
-  properties: {
-    guide: {
-      type: Type.STRING,
-      description: "A short execution guide explaining the key insights.",
-    },
-    notebookName: {
-      type: Type.STRING,
-      description: "Suggested filename ending in .ipynb",
-    },
-    cells: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          cell_type: { type: Type.STRING, enum: ["code", "markdown"] },
-          source: { type: Type.STRING },
-        },
-        required: ["cell_type", "source"],
-      },
-    },
-  },
-  required: ["guide", "notebookName", "cells"],
-};
+// Shared markdown instruction for all providers (more reliable than JSON)
+const MARKDOWN_NOTEBOOK_INSTRUCTIONS = `
+Create a Jupyter notebook implementation of this paper. Format your response EXACTLY as follows:
+
+---NOTEBOOK_START---
+TITLE: [Paper Implementation Title]
+GUIDE: [Brief 1-2 sentence guide on running this notebook]
+
+---CELL_MARKDOWN---
+# Your Markdown Title Here
+
+Your explanation text here.
+
+---CELL_CODE---
+# Your Python code here
+import numpy as np
+print("Hello")
+
+---CELL_MARKDOWN---
+## Next Section
+
+More explanation...
+
+---CELL_CODE---
+# More code...
+
+---NOTEBOOK_END---
+
+Rules:
+1. Start every code cell with ---CELL_CODE---
+2. Start every markdown cell with ---CELL_MARKDOWN---
+3. The content follows on the next line after the marker
+4. Include at least 5-10 cells mixing code and explanations
+5. Make it a complete, runnable implementation
+6. Focus on the core algorithm, use toy/synthetic data
+7. All code should be CPU-friendly and run in minutes`;
 
 // --- Gemini Implementation ---
 const generateGemini = async (file: File, config: AIConfig): Promise<GeneratedContent> => {
@@ -76,19 +88,17 @@ const generateGemini = async (file: File, config: AIConfig): Promise<GeneratedCo
     contents: {
       parts: [
         { inlineData: { mimeType: file.type, data: base64Data } },
-        { text: "Implement this paper as a toy notebook according to the system instructions. Provide the output in the specified JSON schema." },
+        { text: `Implement this paper as a toy notebook according to the system instructions.${MARKDOWN_NOTEBOOK_INSTRUCTIONS}` },
       ],
     },
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
-      responseMimeType: "application/json",
-      responseSchema: notebookSchema,
     },
   });
 
   const text = response.text;
   if (!text) throw new Error("Empty response from Gemini");
-  return JSON.parse(text) as GeneratedContent;
+  return parseMarkdownNotebook(text);
 };
 
 // --- OpenAI Implementation ---
@@ -110,7 +120,7 @@ const generateOpenAI = async (file: File, config: AIConfig): Promise<GeneratedCo
         content: [
           {
             type: "text",
-            text: "Analyze this research paper PDF and implement it as a toy notebook. Return your response as a JSON object with keys: guide (string), notebookName (string ending in .ipynb), and cells (array of objects with cell_type and source)."
+            text: `Analyze this research paper PDF and implement it as a toy notebook.${MARKDOWN_NOTEBOOK_INSTRUCTIONS}`
           },
           {
             type: "image_url",
@@ -129,7 +139,7 @@ const generateOpenAI = async (file: File, config: AIConfig): Promise<GeneratedCo
       { role: "system", content: SYSTEM_INSTRUCTION },
       { 
         role: "user", 
-        content: `Here is the text content of the research paper:\n\n${textContent}\n\nImplement this paper as a toy notebook. Return your response as a JSON object with keys: guide (string), notebookName (string ending in .ipynb), and cells (array of objects with cell_type and source).` 
+        content: `Here is the text content of the research paper:\n\n${textContent}\n\nImplement this paper as a toy notebook.${MARKDOWN_NOTEBOOK_INSTRUCTIONS}` 
       }
     ];
   }
@@ -143,7 +153,6 @@ const generateOpenAI = async (file: File, config: AIConfig): Promise<GeneratedCo
     body: JSON.stringify({
       model: config.model,
       messages,
-      response_format: { type: "json_object" },
       temperature: config.temperature ?? 0.3,
       max_tokens: config.maxTokens || 4096
     })
@@ -174,7 +183,7 @@ const generateOpenAI = async (file: File, config: AIConfig): Promise<GeneratedCo
     throw new Error("Empty response from OpenAI API");
   }
   
-  return parseJSONResponse(resultText);
+  return parseMarkdownNotebook(resultText);
 };
 
 // Helper for text-only OpenAI generation
@@ -191,10 +200,9 @@ const generateOpenAIWithText = async (textContent: string, config: AIConfig): Pr
         { role: "system", content: SYSTEM_INSTRUCTION },
         { 
           role: "user", 
-          content: `Here is the text content of the research paper:\n\n${textContent}\n\nImplement this paper as a toy notebook. Return your response as a JSON object with keys: guide (string), notebookName (string ending in .ipynb), and cells (array of objects with cell_type and source).` 
+          content: `Here is the text content of the research paper:\n\n${textContent}\n\nImplement this paper as a toy notebook.${MARKDOWN_NOTEBOOK_INSTRUCTIONS}` 
         }
       ],
-      response_format: { type: "json_object" },
       temperature: config.temperature ?? 0.3,
       max_tokens: config.maxTokens || 4096
     })
@@ -206,52 +214,34 @@ const generateOpenAIWithText = async (textContent: string, config: AIConfig): Pr
   }
 
   const data = await response.json();
-  return parseJSONResponse(data.choices[0]?.message?.content || "");
+  return parseMarkdownNotebook(data.choices[0]?.message?.content || "");
 };
 
 // --- Anthropic Implementation ---
 const generateAnthropic = async (file: File, config: AIConfig): Promise<GeneratedContent> => {
-  // Claude 3 models support vision
-  const supportsVision = config.model.includes('claude-3') || 
-                         config.model.includes('claude-3.5') ||
-                         config.model.includes('sonnet') ||
-                         config.model.includes('opus') ||
-                         config.model.includes('haiku');
-  
-  let content: any[];
-  
-  if (supportsVision) {
-    // Use vision - convert PDF to images
-    // Note: Anthropic doesn't support PDF directly, we'll try sending first page as image
-    // For full PDF support, we'd need to convert pages to images server-side
-    // Fall back to text extraction for now but add the base64 as document
-    const base64Data = await processFileToBase64(file);
-    
-    // Try text extraction first, use vision as backup context
-    let textContent = "";
-    try {
-      textContent = await extractAndValidateText(file);
-    } catch (e) {
-      // If text extraction fails, we'll rely on the instruction to analyze
-      textContent = "[PDF text could not be extracted - this may be a scanned document]";
-    }
-    
-    content = [
-      {
-        type: "text",
-        text: `Here is a research paper. The extracted text is below (if available). Please analyze and implement it as a toy notebook.\n\nExtracted text:\n${textContent}\n\nImplement this paper as a toy notebook. Return ONLY a valid JSON object with these exact keys:\n- "guide": a short execution guide (string)\n- "notebookName": filename ending in .ipynb (string)\n- "cells": array of objects, each with "cell_type" ("code" or "markdown") and "source" (string)`
-      }
-    ];
-  } else {
-    // Text only for older models
-    const textContent = await extractAndValidateText(file);
-    content = [
-      {
-        type: "text",
-        text: `Here is the text content of the research paper:\n\n${textContent}\n\nImplement this paper as a toy notebook. Return ONLY a valid JSON object with these exact keys:\n- "guide": a short execution guide (string)\n- "notebookName": filename ending in .ipynb (string)\n- "cells": array of objects, each with "cell_type" ("code" or "markdown") and "source" (string)`
-      }
-    ];
+  // Extract text content - Anthropic works better with text than trying to process PDFs directly
+  let textContent = "";
+  try {
+    textContent = await extractAndValidateText(file);
+  } catch (e) {
+    throw new Error(
+      "Could not extract text from this PDF. Claude API requires text-based PDFs. " +
+      "Please try with Gemini which can process scanned PDFs, or use a PDF with selectable text."
+    );
   }
+  
+  // Limit text to avoid hitting context limits (Claude 3 Haiku has smaller context)
+  const maxTextLength = config.model.includes('haiku') ? 50000 : 80000;
+  if (textContent.length > maxTextLength) {
+    textContent = textContent.substring(0, maxTextLength) + "\n\n[Text truncated due to length...]";
+  }
+
+  const content = [
+    {
+      type: "text",
+      text: `Here is the text content of the research paper:\n\n${textContent}\n\nImplement this paper as a toy Jupyter notebook following the system instructions.${MARKDOWN_NOTEBOOK_INSTRUCTIONS}`
+    }
+  ];
   
   // Determine max tokens - respect model limits (Claude 3 non-3.5 maxes at 4096)
   const modelMaxTokens = config.model.includes('3-5') || config.model.includes('3.5') ? 8192 : 4096;
@@ -302,44 +292,134 @@ const generateAnthropic = async (file: File, config: AIConfig): Promise<Generate
     throw new Error("Empty response from Anthropic API");
   }
   
-  return parseJSONResponse(resultText);
+  // Parse the markdown-formatted response
+  return parseMarkdownNotebook(resultText);
 };
 
-// Helper to parse JSON from model response (handles markdown code blocks)
-const parseJSONResponse = (text: string): GeneratedContent => {
-  if (!text || text.trim().length === 0) {
-    throw new Error("Empty response received from AI model");
+// Parse markdown-formatted notebook response (more reliable than JSON for some models)
+const parseMarkdownNotebook = (text: string): GeneratedContent => {
+  const cells: NotebookCell[] = [];
+  let guide = "Run cells sequentially to see the implementation.";
+  let notebookName = "paper_implementation.ipynb";
+  
+  // Extract title and guide if present
+  const titleMatch = text.match(/TITLE:\s*(.+?)(?:\n|$)/i);
+  if (titleMatch) {
+    notebookName = titleMatch[1].trim().replace(/[^a-zA-Z0-9_-]/g, '_') + '.ipynb';
   }
   
-  // Try direct parse first
-  try {
-    return JSON.parse(text) as GeneratedContent;
-  } catch {
-    // Try removing markdown code blocks
-    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (jsonMatch) {
-      try {
-        return JSON.parse(jsonMatch[1].trim()) as GeneratedContent;
-      } catch {
-        // Continue to other attempts
-      }
-    }
+  const guideMatch = text.match(/GUIDE:\s*(.+?)(?:\n---|\n\n|$)/is);
+  if (guideMatch) {
+    guide = guideMatch[1].trim();
+  }
+  
+  // Split by cell markers
+  const cellPattern = /---CELL_(MARKDOWN|CODE)---/gi;
+  const parts = text.split(cellPattern);
+  
+  // Process parts - each cell type marker is followed by its content
+  for (let i = 1; i < parts.length; i += 2) {
+    const cellType = parts[i]?.toLowerCase();
+    const cellContent = parts[i + 1]?.trim();
     
-    // Try finding JSON object in the text
-    const objectMatch = text.match(/\{[\s\S]*\}/);
-    if (objectMatch) {
-      try {
-        return JSON.parse(objectMatch[0]) as GeneratedContent;
-      } catch {
-        // Continue
-      }
+    if (cellContent && (cellType === 'markdown' || cellType === 'code')) {
+      cells.push({
+        cell_type: cellType as 'markdown' | 'code',
+        source: cellContent
+      });
     }
-    
+  }
+  
+  // Fallback: if no cells found with markers, try to extract code blocks
+  if (cells.length === 0) {
+    console.log("No cell markers found, falling back to code block extraction");
+    return parseCodeBlocksAsNotebook(text);
+  }
+  
+  // Ensure we have at least some content
+  if (cells.length < 2) {
     throw new Error(
-      "Failed to parse AI response as JSON. The model may have returned an invalid format. " +
-      "Please try again or switch to a different model."
+      "The AI response didn't contain enough content to create a notebook. " +
+      "Please try again or use a different model."
     );
   }
+  
+  return { guide, notebookName, cells };
+};
+
+// Fallback parser that extracts code blocks from markdown
+const parseCodeBlocksAsNotebook = (text: string): GeneratedContent => {
+  const cells: NotebookCell[] = [];
+  
+  // Match code blocks with optional language specifier
+  const codeBlockRegex = /```(?:python|py)?\n([\s\S]*?)```/g;
+  let lastIndex = 0;
+  let match;
+  
+  while ((match = codeBlockRegex.exec(text)) !== null) {
+    // Add any text before this code block as markdown
+    const textBefore = text.slice(lastIndex, match.index).trim();
+    if (textBefore) {
+      // Clean up the markdown text
+      const cleanedText = textBefore
+        .replace(/---NOTEBOOK_START---.*?(?=```|$)/gis, '')
+        .replace(/---NOTEBOOK_END---/gi, '')
+        .replace(/TITLE:.*?\n/gi, '')
+        .replace(/GUIDE:.*?\n/gi, '')
+        .trim();
+      
+      if (cleanedText) {
+        cells.push({ cell_type: 'markdown', source: cleanedText });
+      }
+    }
+    
+    // Add the code block
+    const codeContent = match[1].trim();
+    if (codeContent) {
+      cells.push({ cell_type: 'code', source: codeContent });
+    }
+    
+    lastIndex = match.index + match[0].length;
+  }
+  
+  // Add any remaining text as markdown
+  const remainingText = text.slice(lastIndex).trim()
+    .replace(/---NOTEBOOK_END---/gi, '')
+    .trim();
+  if (remainingText && cells.length > 0) {
+    cells.push({ cell_type: 'markdown', source: remainingText });
+  }
+  
+  if (cells.length === 0) {
+    // Last resort: treat the whole response as a single code cell
+    const cleanedText = text
+      .replace(/---NOTEBOOK_START---/gi, '')
+      .replace(/---NOTEBOOK_END---/gi, '')
+      .replace(/TITLE:.*?\n/gi, '')
+      .replace(/GUIDE:.*?\n/gi, '')
+      .trim();
+    
+    if (cleanedText) {
+      cells.push({ 
+        cell_type: 'markdown', 
+        source: '# Paper Implementation\n\nGenerated implementation from the research paper.' 
+      });
+      cells.push({ cell_type: 'code', source: cleanedText });
+    }
+  }
+  
+  if (cells.length === 0) {
+    throw new Error(
+      "Could not extract any code from the AI response. " +
+      "Please try again with a different model (Gemini recommended)."
+    );
+  }
+  
+  return {
+    guide: "Run cells sequentially. Generated from raw model output.",
+    notebookName: "paper_implementation.ipynb",
+    cells
+  };
 };
 
 // --- Groq Implementation ---
@@ -358,10 +438,9 @@ const generateGroq = async (file: File, config: AIConfig): Promise<GeneratedCont
         { role: "system", content: SYSTEM_INSTRUCTION },
         { 
           role: "user", 
-          content: `Here is the text content of the research paper:\n\n${textContent}\n\nImplement this paper as a toy notebook. Return your response as a JSON object with keys: guide (string), notebookName (string ending in .ipynb), and cells (array of objects with cell_type and source).` 
+          content: `Here is the text content of the research paper:\n\n${textContent}\n\nImplement this paper as a toy notebook.${MARKDOWN_NOTEBOOK_INSTRUCTIONS}` 
         }
       ],
-      response_format: { type: "json_object" },
       temperature: config.temperature ?? 0.3,
       max_tokens: config.maxTokens || 8192
     })
@@ -378,7 +457,7 @@ const generateGroq = async (file: File, config: AIConfig): Promise<GeneratedCont
   }
 
   const data = await response.json();
-  return parseJSONResponse(data.choices[0]?.message?.content || "");
+  return parseMarkdownNotebook(data.choices[0]?.message?.content || "");
 };
 
 // --- Ollama Implementation ---
@@ -397,11 +476,10 @@ const generateOllama = async (file: File, config: AIConfig): Promise<GeneratedCo
         { role: "system", content: SYSTEM_INSTRUCTION },
         { 
           role: "user", 
-          content: `Here is the text content of the research paper:\n\n${textContent}\n\nImplement this paper as a toy notebook. Return your response as a JSON object with keys: guide (string), notebookName (string ending in .ipynb), and cells (array of objects with cell_type and source). Return ONLY the JSON, no other text.` 
+          content: `Here is the text content of the research paper:\n\n${textContent}\n\nImplement this paper as a toy notebook.${MARKDOWN_NOTEBOOK_INSTRUCTIONS}` 
         }
       ],
-      stream: false,
-      format: "json"
+      stream: false
     })
   });
 
@@ -417,7 +495,7 @@ const generateOllama = async (file: File, config: AIConfig): Promise<GeneratedCo
   }
 
   const data = await response.json();
-  return parseJSONResponse(data.message?.content || "");
+  return parseMarkdownNotebook(data.message?.content || "");
 };
 
 // --- HuggingFace Implementation ---
@@ -427,7 +505,7 @@ const generateHuggingFace = async (file: File, config: AIConfig): Promise<Genera
   // HuggingFace Inference API endpoint
   const modelEndpoint = `https://api-inference.huggingface.co/models/${config.model}`;
   
-  const prompt = `${SYSTEM_INSTRUCTION}\n\nUser: Here is the text content of the research paper:\n\n${textContent}\n\nImplement this paper as a toy notebook. Return your response as a JSON object with keys: guide (string), notebookName (string ending in .ipynb), and cells (array of objects with cell_type and source).\n\nAssistant:`;
+  const prompt = `${SYSTEM_INSTRUCTION}\n\nUser: Here is the text content of the research paper:\n\n${textContent}\n\nImplement this paper as a toy notebook.${MARKDOWN_NOTEBOOK_INSTRUCTIONS}\n\nAssistant:`;
   
   const response = await fetch(modelEndpoint, {
     method: "POST",
@@ -464,7 +542,7 @@ const generateHuggingFace = async (file: File, config: AIConfig): Promise<Genera
     throw new Error("Empty response from HuggingFace API");
   }
   
-  return parseJSONResponse(generatedText);
+  return parseMarkdownNotebook(generatedText);
 };
 
 export const generateToyImplementation = async (file: File, config: AIConfig): Promise<GeneratedContent> => {
@@ -472,22 +550,36 @@ export const generateToyImplementation = async (file: File, config: AIConfig): P
     throw new Error("API Key is required.");
   }
 
-  switch (config.provider) {
-    case 'gemini':
-      return generateGemini(file, config);
-    case 'openai':
-      return generateOpenAI(file, config);
-    case 'anthropic':
-      return generateAnthropic(file, config);
-    case 'groq':
-      return generateGroq(file, config);
-    case 'ollama':
-      return generateOllama(file, config);
-    case 'huggingface':
-      return generateHuggingFace(file, config);
-    default:
-      throw new Error(`Unsupported provider: ${config.provider}`);
-  }
+  // Use retry with exponential backoff for API resilience
+  const generateFn = async (): Promise<GeneratedContent> => {
+    switch (config.provider) {
+      case 'gemini':
+        return generateGemini(file, config);
+      case 'openai':
+        return generateOpenAI(file, config);
+      case 'anthropic':
+        return generateAnthropic(file, config);
+      case 'groq':
+        return generateGroq(file, config);
+      case 'ollama':
+        return generateOllama(file, config);
+      case 'huggingface':
+        return generateHuggingFace(file, config);
+      default:
+        throw new Error(`Unsupported provider: ${config.provider}`);
+    }
+  };
+
+  return withRetry(generateFn, {
+    maxAttempts: 3,
+    initialDelayMs: 1000,
+    maxDelayMs: 10000,
+    backoffMultiplier: 2,
+    onRetry: (attempt, error) => {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.warn(`Generation attempt ${attempt} failed: ${errorMessage}. Retrying...`);
+    }
+  });
 };
 
 export const createNotebookBlob = (cells: NotebookCell[]): Blob => {

@@ -5,9 +5,46 @@
  * Implements a 3-step pipeline: Analyze → Design → Generate Code
  */
 
-import { AIConfig, GeneratedContent, PaperDomain, EnrichedDocument } from "../types";
+import { AIConfig, GeneratedContent, PaperDomain, EnrichedDocument, NotebookCell } from "../types";
 import { SYSTEM_INSTRUCTION } from "../constants";
 import { extractEnrichedDocument } from "./pdfService";
+
+// Markdown format instructions for notebook generation
+const MARKDOWN_NOTEBOOK_INSTRUCTIONS = `
+Create a Jupyter notebook implementation. Format your response EXACTLY as follows:
+
+---NOTEBOOK_START---
+TITLE: [Paper Implementation Title]
+GUIDE: [Brief 1-2 sentence guide on running this notebook]
+
+---CELL_MARKDOWN---
+# Your Markdown Title Here
+
+Your explanation text here.
+
+---CELL_CODE---
+# Your Python code here
+import numpy as np
+print("Hello")
+
+---CELL_MARKDOWN---
+## Next Section
+
+More explanation...
+
+---CELL_CODE---
+# More code...
+
+---NOTEBOOK_END---
+
+Rules:
+1. Start every code cell with ---CELL_CODE---
+2. Start every markdown cell with ---CELL_MARKDOWN---
+3. The content follows on the next line after the marker
+4. Include at least 5-10 cells mixing code and explanations
+5. Make it a complete, runnable implementation
+6. Focus on the core algorithm, use toy/synthetic data
+7. All code should be CPU-friendly and run in minutes`;
 
 // ============================================================================
 // STEP PROMPTS - Embedded directly in TypeScript for browser execution
@@ -20,28 +57,22 @@ Extract structured information from the research paper to guide implementation p
 
 ## Required Outputs
 
-1. **Paper Intent**: What problem does it solve? (1-2 sentences)
-2. **Novelty**: What's new compared to prior work? (1-2 sentences)  
-3. **Core Algorithms**: List 2-4 key algorithms/techniques by name
-4. **Complexity Assessment**: Simple | Moderate | Complex
-5. **Dependencies**: What existing algorithms/models does it build on?
+Respond in this EXACT format (copy these labels exactly):
+
+INTENT: [What problem does this paper solve? 1-2 sentences]
+
+NOVELTY: [What's new compared to prior work? 1-2 sentences]
+
+CORE_ALGORITHMS: [Algorithm 1], [Algorithm 2], [Algorithm 3]
+
+COMPLEXITY: [Simple | Moderate | Complex]
+
+DEPENDENCIES: [dependency1], [dependency2]
 
 ## Complexity Scale
-
-**Simple**: Single algorithm, few steps, runs quickly, minimal dependencies
-**Moderate**: Multi-stage pipeline, moderate dependencies, reasonable training time  
-**Complex**: Distributed training, large models, many components
-
-## Output Format (JSON ONLY)
-
-Return ONLY valid JSON with no markdown code fences:
-{
-  "intent": "Brief problem statement (1-2 sentences)",
-  "novelty": "What's new in this paper (1-2 sentences)",
-  "core_algorithms": ["Algorithm Name 1", "Algorithm Name 2"],
-  "complexity": "Simple | Moderate | Complex",
-  "dependencies": ["prerequisite_1", "prerequisite_2"]
-}
+- Simple: Single algorithm, few steps, runs quickly
+- Moderate: Multi-stage pipeline, moderate dependencies
+- Complex: Distributed training, large models, many components
 `;
 
 const STEP2_DESIGN_PROMPT = `
@@ -63,36 +94,30 @@ Design a simplified implementation following the core principle:
 
 ## Required Outputs
 
-1. **Toy Architecture**: High-level design (3-5 sentences)
-2. **Simplification Strategy**: How to simplify each heavy component
-3. **Mock Components**: What will be mocked and how
-4. **Expected Behavior**: What qualitative trends should we observe?
-5. **Module Breakdown**: Map paper sections to notebook cells
+Respond in this EXACT format (copy these labels exactly):
+
+ARCHITECTURE: [High-level design in 3-5 sentences]
+
+SIMPLIFICATIONS:
+- [Original component] -> [Simplified version]: [Why this works]
+- [Original component] -> [Simplified version]: [Why this works]
+
+MOCK_COMPONENTS:
+- [ComponentName] (type): [How it will be implemented]
+- [ComponentName] (type): [How it will be implemented]
+
+EXPECTED_BEHAVIOR: [What trends/patterns should we observe?]
+
+MODULE_BREAKDOWN:
+- [Paper Section] -> [Notebook Cell Purpose]
+- [Paper Section] -> [Notebook Cell Purpose]
 
 ## Simplification Strategies
-
-**Neural Networks** → 1-2 hidden layers, 5-50 units, ReLU/tanh
-**Datasets** → Generate synthetic with same statistical properties
-**Reward Models** → Heuristic scoring with 2-3 features  
-**Pretrained Models** → Shallow embeddings or rule-based
-**Distributed Systems** → Single-process with print statements
-
-## Output Format (JSON ONLY)
-
-Return ONLY valid JSON with no markdown code fences:
-{
-  "toy_architecture": "High-level design description",
-  "simplifications": [
-    {"original": "Heavy component", "simplified": "Toy replacement", "rationale": "Why this works"}
-  ],
-  "mock_components": [
-    {"name": "Component name", "type": "generator|model|scorer", "implementation": "Brief description"}
-  ],
-  "expected_behavior": "What trends/patterns to expect",
-  "module_breakdown": [
-    {"section": "Paper section name", "notebook_cell": "Cell purpose/title"}
-  ]
-}
+- Neural Networks -> 1-2 hidden layers, 5-50 units, ReLU/tanh
+- Datasets -> Generate synthetic with same statistical properties
+- Reward Models -> Heuristic scoring with 2-3 features
+- Pretrained Models -> Shallow embeddings or rule-based
+- Distributed Systems -> Single-process with print statements
 `;
 
 const DOMAIN_CONTEXTS: Record<PaperDomain, string> = {
@@ -425,33 +450,223 @@ const callHuggingFace = async (systemPrompt: string, userPrompt: string, config:
 };
 
 /**
- * Parse JSON from AI response (handles markdown code blocks)
+ * Parse analysis response from text format
  */
-const parseJSON = <T>(text: string): T => {
-  if (!text?.trim()) throw new Error("Empty response from AI");
+const parseAnalysisResponse = (text: string): AnalysisResult => {
+  if (!text?.trim()) throw new Error("Empty response from AI in Analysis step");
   
-  // Try direct parse
-  try {
-    return JSON.parse(text);
-  } catch {
-    // Try extracting from markdown blocks
-    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (jsonMatch) {
-      try {
-        return JSON.parse(jsonMatch[1].trim());
-      } catch {}
-    }
+  // Try to extract labeled fields
+  const getField = (label: string): string => {
+    const regex = new RegExp(`${label}:\\s*(.+?)(?=\\n[A-Z_]+:|$)`, 'is');
+    const match = text.match(regex);
+    return match ? match[1].trim() : '';
+  };
+  
+  const getListField = (label: string): string[] => {
+    const value = getField(label);
+    if (!value) return [];
+    // Split by commas, "and", or newlines with bullets
+    return value
+      .split(/[,\n]|(?:\band\b)/)
+      .map(s => s.replace(/^[\s\-\*\d\.]+/, '').replace(/[\[\]]/g, '').trim())
+      .filter(s => s.length > 0);
+  };
+  
+  const intent = getField('INTENT') || getField('Intent') || 'Paper analysis intent not extracted';
+  const novelty = getField('NOVELTY') || getField('Novelty') || 'Paper novelty not extracted';
+  const core_algorithms = getListField('CORE_ALGORITHMS') || getListField('Core Algorithms') || ['Algorithm'];
+  const complexity = (getField('COMPLEXITY') || getField('Complexity') || 'Moderate') as 'Simple' | 'Moderate' | 'Complex';
+  const dependencies = getListField('DEPENDENCIES') || getListField('Dependencies') || [];
+  
+  // Validate we got something useful
+  if (intent === 'Paper analysis intent not extracted' && novelty === 'Paper novelty not extracted') {
+    // Try JSON fallback
+    try {
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]) as AnalysisResult;
+      }
+    } catch {}
     
-    // Try finding JSON object
-    const objectMatch = text.match(/\{[\s\S]*\}/);
-    if (objectMatch) {
-      try {
-        return JSON.parse(objectMatch[0]);
-      } catch {}
-    }
-    
-    throw new Error("Failed to parse AI response as JSON. Please try again.");
+    // Return a basic analysis based on raw text
+    console.warn("Could not parse structured analysis, using fallback");
+    return {
+      intent: text.substring(0, 200) || 'See paper for details',
+      novelty: 'Novel approach described in paper',
+      core_algorithms: ['Main Algorithm'],
+      complexity: 'Moderate',
+      dependencies: []
+    };
   }
+  
+  return { intent, novelty, core_algorithms, complexity, dependencies };
+};
+
+/**
+ * Parse design response from text format
+ */
+const parseDesignResponse = (text: string): DesignResult => {
+  if (!text?.trim()) throw new Error("Empty response from AI in Design step");
+  
+  const getField = (label: string): string => {
+    const regex = new RegExp(`${label}:\\s*(.+?)(?=\\n[A-Z_]+:|$)`, 'is');
+    const match = text.match(regex);
+    return match ? match[1].trim() : '';
+  };
+  
+  const getListSection = (label: string): string[] => {
+    const regex = new RegExp(`${label}:([\\s\\S]*?)(?=\\n[A-Z_]+:|$)`, 'i');
+    const match = text.match(regex);
+    if (!match) return [];
+    return match[1]
+      .split('\n')
+      .map(s => s.replace(/^[\s\-\*]+/, '').trim())
+      .filter(s => s.length > 0);
+  };
+  
+  const architecture = getField('ARCHITECTURE') || getField('Architecture') || 'Toy implementation of paper algorithm';
+  const expectedBehavior = getField('EXPECTED_BEHAVIOR') || getField('Expected Behavior') || 'Implementation demonstrates key concepts';
+  
+  // Parse simplifications
+  const simplificationLines = getListSection('SIMPLIFICATIONS') || getListSection('Simplifications');
+  const simplifications = simplificationLines.map(line => {
+    const arrowMatch = line.match(/(.+?)\s*(?:->|→|:)\s*(.+?)(?::|$)(.*)?/);
+    if (arrowMatch) {
+      return {
+        original: arrowMatch[1].trim(),
+        simplified: arrowMatch[2].trim(),
+        rationale: arrowMatch[3]?.trim() || 'Simplifies computation'
+      };
+    }
+    return { original: line, simplified: 'Toy version', rationale: 'Simplification' };
+  });
+  
+  // Parse mock components
+  const mockLines = getListSection('MOCK_COMPONENTS') || getListSection('Mock Components');
+  const mock_components = mockLines.map(line => {
+    const match = line.match(/(.+?)\s*\((.+?)\)\s*:?\s*(.*)/);
+    if (match) {
+      return {
+        name: match[1].trim(),
+        type: match[2].trim() as 'generator' | 'model' | 'scorer',
+        implementation: match[3]?.trim() || 'Simple implementation'
+      };
+    }
+    return { name: line, type: 'model' as const, implementation: 'Mock implementation' };
+  });
+  
+  // Parse module breakdown
+  const moduleLines = getListSection('MODULE_BREAKDOWN') || getListSection('Module Breakdown');
+  const module_breakdown = moduleLines.map(line => {
+    const arrowMatch = line.match(/(.+?)\s*(?:->|→|:)\s*(.+)/);
+    if (arrowMatch) {
+      return {
+        section: arrowMatch[1].trim(),
+        notebook_cell: arrowMatch[2].trim()
+      };
+    }
+    return { section: line, notebook_cell: 'Implementation cell' };
+  });
+  
+  // Validate and provide defaults
+  if (!architecture || architecture === 'Toy implementation of paper algorithm') {
+    // Try JSON fallback
+    try {
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]) as DesignResult;
+      }
+    } catch {}
+  }
+  
+  return {
+    toy_architecture: architecture,
+    simplifications: simplifications.length > 0 ? simplifications : [
+      { original: 'Full model', simplified: 'Toy model', rationale: 'Reduces complexity' }
+    ],
+    mock_components: mock_components.length > 0 ? mock_components : [
+      { name: 'ToyModel', type: 'model', implementation: 'Simple neural network' }
+    ],
+    expected_behavior: expectedBehavior,
+    module_breakdown: module_breakdown.length > 0 ? module_breakdown : [
+      { section: 'Introduction', notebook_cell: 'Setup and imports' },
+      { section: 'Method', notebook_cell: 'Core implementation' },
+      { section: 'Results', notebook_cell: 'Evaluation and visualization' }
+    ]
+  };
+};
+
+/**
+ * Parse markdown-formatted notebook response
+ */
+const parseMarkdownNotebook = (text: string): GeneratedContent => {
+  const cells: NotebookCell[] = [];
+  let guide = "Run cells sequentially to see the implementation.";
+  let notebookName = "paper_implementation.ipynb";
+  
+  // Extract title and guide if present
+  const titleMatch = text.match(/TITLE:\s*(.+?)(?:\n|$)/i);
+  if (titleMatch) {
+    notebookName = titleMatch[1].trim().replace(/[^a-zA-Z0-9_-]/g, '_') + '.ipynb';
+  }
+  
+  const guideMatch = text.match(/GUIDE:\s*(.+?)(?:\n---|\n\n|$)/is);
+  if (guideMatch) {
+    guide = guideMatch[1].trim();
+  }
+  
+  // Split by cell markers
+  const cellPattern = /---CELL_(MARKDOWN|CODE)---/gi;
+  const parts = text.split(cellPattern);
+  
+  // Process parts
+  for (let i = 1; i < parts.length; i += 2) {
+    const cellType = parts[i]?.toLowerCase();
+    const cellContent = parts[i + 1]?.trim();
+    
+    if (cellContent && (cellType === 'markdown' || cellType === 'code')) {
+      cells.push({
+        cell_type: cellType as 'markdown' | 'code',
+        source: cellContent
+      });
+    }
+  }
+  
+  // Fallback: extract code blocks if no markers found
+  if (cells.length === 0) {
+    const codeBlockRegex = /```(?:python|py)?\n([\s\S]*?)```/g;
+    let lastIndex = 0;
+    let match;
+    
+    while ((match = codeBlockRegex.exec(text)) !== null) {
+      const textBefore = text.slice(lastIndex, match.index).trim()
+        .replace(/---NOTEBOOK_START---.*?(?=```|$)/gis, '')
+        .replace(/---NOTEBOOK_END---/gi, '')
+        .replace(/TITLE:.*?\n/gi, '')
+        .replace(/GUIDE:.*?\n/gi, '')
+        .trim();
+      
+      if (textBefore) {
+        cells.push({ cell_type: 'markdown', source: textBefore });
+      }
+      
+      const codeContent = match[1].trim();
+      if (codeContent) {
+        cells.push({ cell_type: 'code', source: codeContent });
+      }
+      
+      lastIndex = match.index + match[0].length;
+    }
+  }
+  
+  if (cells.length < 2) {
+    throw new Error(
+      "Could not extract notebook cells from the AI response. " +
+      "Try disabling Multi-Step Generation or using a different model."
+    );
+  }
+  
+  return { guide, notebookName, cells };
 };
 
 // ============================================================================
@@ -476,7 +691,7 @@ export const step1Analyze = async (
   const userPrompt = `Analyze this research paper and extract the required information.\n\nPaper content:\n${paperText.substring(0, 50000)}`;
   
   const response = await callProvider(STEP1_ANALYSIS_PROMPT, userPrompt, config);
-  return parseJSON<AnalysisResult>(response);
+  return parseAnalysisResponse(response);
 };
 
 /**
@@ -514,7 +729,7 @@ ${paperText.substring(0, 30000)}
 Design the toy architecture following the guidelines.`;
 
   const response = await callProvider(systemPrompt, userPrompt, config);
-  return parseJSON<DesignResult>(response);
+  return parseDesignResponse(response);
 };
 
 /**
@@ -565,17 +780,10 @@ ${domainContext}
 ## Paper Content
 ${paperText.substring(0, 40000)}
 
-Generate the complete notebook. Return ONLY valid JSON with this structure:
-{
-  "guide": "Execution guide explaining the notebook",
-  "notebookName": "descriptive_name.ipynb",
-  "cells": [
-    {"cell_type": "markdown" | "code", "source": "cell content"}
-  ]
-}`;
+Generate the complete notebook.${MARKDOWN_NOTEBOOK_INSTRUCTIONS}`;
 
   const response = await callProvider(SYSTEM_INSTRUCTION, userPrompt, config);
-  return parseJSON<GeneratedContent>(response);
+  return parseMarkdownNotebook(response);
 };
 
 /**
@@ -647,13 +855,8 @@ ${domainContext}
 Paper Content:
 ${enrichedDoc.fullText.substring(0, 60000)}
 
-Return ONLY valid JSON with this structure:
-{
-  "guide": "Execution guide",
-  "notebookName": "name.ipynb", 
-  "cells": [{"cell_type": "markdown"|"code", "source": "content"}]
-}`;
+${MARKDOWN_NOTEBOOK_INSTRUCTIONS}`;
 
   const response = await callProvider(SYSTEM_INSTRUCTION, userPrompt, config);
-  return parseJSON<GeneratedContent>(response);
+  return parseMarkdownNotebook(response);
 };

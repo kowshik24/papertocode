@@ -1,28 +1,57 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import FileUpload from './components/FileUpload';
 import ProcessingState from './components/ProcessingState';
 import ResultView from './components/ResultView';
 import ConfigPanel from './components/ConfigPanel';
+import ThemeToggle from './components/ThemeToggle';
 import { generateToyImplementation } from './services/geminiService';
 import { generateMultiStep, MultiStepProgress, AnalysisResult, DesignResult } from './services/orchestratorService';
 import { AppState, GeneratedContent, GenerationError, AIConfig, EnrichedDocument } from './types';
+import { loadConfig, saveConfig, loadTheme, applyTheme, addRecentPaper, addToHistory } from './utils/storage';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
   const [content, setContent] = useState<GeneratedContent | null>(null);
   const [error, setError] = useState<GenerationError | null>(null);
-  const [useMultiStep, setUseMultiStep] = useState<boolean>(true);
   const [progress, setProgress] = useState<MultiStepProgress | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [designResult, setDesignResult] = useState<DesignResult | null>(null);
   const [enrichedDoc, setEnrichedDoc] = useState<EnrichedDocument | null>(null);
-  const [aiConfig, setAiConfig] = useState<AIConfig>({
-    provider: 'gemini',
-    model: 'gemini-2.0-flash',
-    apiKey: '',
-    maxTokens: 4096,
-    temperature: 0.3
+  const [currentFileName, setCurrentFileName] = useState<string>('');
+  
+  // Load saved settings on initial render
+  const savedData = loadConfig();
+  const [useMultiStep, setUseMultiStep] = useState<boolean>(savedData?.useMultiStep ?? true);
+  const [aiConfig, setAiConfig] = useState<AIConfig>(() => {
+    if (savedData?.config) {
+      // Merge saved config with defaults (in case some keys are missing)
+      return {
+        provider: savedData.config.provider || 'gemini',
+        model: savedData.config.model || 'gemini-2.0-flash',
+        apiKey: savedData.config.apiKey || '',
+        maxTokens: savedData.config.maxTokens || 4096,
+        temperature: savedData.config.temperature ?? 0.3,
+        ollamaEndpoint: savedData.config.ollamaEndpoint,
+      };
+    }
+    return {
+      provider: 'gemini',
+      model: 'gemini-2.0-flash',
+      apiKey: '',
+      maxTokens: 4096,
+      temperature: 0.3
+    };
   });
+
+  // Apply saved theme on mount
+  useEffect(() => {
+    applyTheme(loadTheme());
+  }, []);
+
+  // Save config whenever it changes
+  useEffect(() => {
+    saveConfig(aiConfig, useMultiStep);
+  }, [aiConfig, useMultiStep]);
 
   const handleFileSelect = async (file: File) => {
     // Check API key (except for Ollama which doesn't need one)
@@ -41,6 +70,10 @@ const App: React.FC = () => {
     setAnalysisResult(null);
     setDesignResult(null);
     setEnrichedDoc(null);
+    setCurrentFileName(file.name);
+
+    // Add to recent papers
+    addRecentPaper(file.name);
 
     try {
       if (useMultiStep) {
@@ -52,10 +85,26 @@ const App: React.FC = () => {
         setAnalysisResult(result.analysis);
         setDesignResult(result.design);
         setEnrichedDoc(result.enrichedDoc);
+
+        // Add successful generation to history
+        addToHistory({
+          paperName: file.name,
+          provider: aiConfig.provider,
+          model: aiConfig.model,
+          multiStep: true
+        });
       } else {
         // Single-step generation (original behavior)
         const result = await generateToyImplementation(file, aiConfig);
         setContent(result);
+
+        // Add successful generation to history
+        addToHistory({
+          paperName: file.name,
+          provider: aiConfig.provider,
+          model: aiConfig.model,
+          multiStep: false
+        });
       }
       setAppState(AppState.COMPLETE);
     } catch (err: any) {
@@ -76,6 +125,7 @@ const App: React.FC = () => {
     setAnalysisResult(null);
     setDesignResult(null);
     setEnrichedDoc(null);
+    setCurrentFileName('');
   };
 
   return (
@@ -94,8 +144,11 @@ const App: React.FC = () => {
               <p className="text-xs text-claude-text-secondary">Transform Research into Notebooks</p>
             </div>
           </div>
-          <div className="text-sm text-claude-text-secondary font-medium hidden sm:flex items-center gap-2 bg-claude-bg-alt border border-claude-border px-4 py-2 rounded-xl shadow-soft">
-            <span className="text-claude-orange">✽</span> Multi-Provider Supported
+          <div className="flex items-center gap-3">
+            <div className="text-sm text-claude-text-secondary dark:text-claude-dark-text-secondary font-medium hidden sm:flex items-center gap-2 bg-claude-bg-alt dark:bg-claude-dark-bg-alt border border-claude-border dark:border-claude-dark-border px-4 py-2 rounded-xl shadow-soft">
+              <span className="text-claude-orange">✽</span> Multi-Provider Supported
+            </div>
+            <ThemeToggle />
           </div>
         </div>
       </header>

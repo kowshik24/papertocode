@@ -9,18 +9,21 @@ interface ConfigPanelProps {
 }
 
 const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, onChange, disabled }) => {
-  const [availableModels, setAvailableModels] = useState<AIModel[]>(FALLBACK_MODELS[config.provider]);
+  // Ensure we have a valid provider, default to 'gemini' if not
+  const safeProvider = FALLBACK_MODELS[config.provider] ? config.provider : 'gemini';
+  
+  const [availableModels, setAvailableModels] = useState<AIModel[]>(FALLBACK_MODELS[safeProvider] || []);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [isKeyValid, setIsKeyValid] = useState<boolean | null>(null);
 
   // Reset models when provider changes
   useEffect(() => {
-    setAvailableModels(FALLBACK_MODELS[config.provider]);
+    const fallbacks = FALLBACK_MODELS[config.provider] || FALLBACK_MODELS['gemini'] || [];
+    setAvailableModels(fallbacks);
     setIsKeyValid(null);
     // If we have an API key, try to fetch models immediately or keep default
     // We default to the first model in the fallback list if the current model is invalid for the new provider
-    const fallbacks = FALLBACK_MODELS[config.provider];
-    if (!fallbacks.find(m => m.id === config.model)) {
+    if (fallbacks.length > 0 && !fallbacks.find(m => m.id === config.model)) {
         onChange({ ...config, model: fallbacks[0].id });
     }
   }, [config.provider]);
