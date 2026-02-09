@@ -125,22 +125,22 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, onChange, disabled })
     <div className="w-full max-w-2xl mx-auto space-y-4 mb-8">
       
       {/* Configuration Card */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden transition-all hover:shadow-md">
+      <div className="bg-claude-bg-alt rounded-2xl border border-claude-border overflow-hidden transition-all hover:shadow-soft-md">
         
         {/* Header */}
-        <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="p-1.5 bg-white rounded-md border border-slate-200 shadow-sm text-slate-600">
+        <div className="bg-claude-bg px-6 py-4 border-b border-claude-border flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="p-2 bg-claude-bg-alt rounded-xl border border-claude-border shadow-soft text-claude-text-secondary">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
             </span>
-            <h3 className="font-semibold text-slate-800">Model Configuration</h3>
+            <h3 className="font-semibold text-claude-text">Model Configuration</h3>
           </div>
-          <div className="flex space-x-1">
-             <span className={`h-2 w-2 rounded-full mt-2 ${config.apiKey ? 'bg-green-500' : 'bg-slate-300'}`}></span>
-             <span className="text-xs font-medium text-slate-500 pt-1">
+          <div className="flex items-center gap-2">
+             <span className={`h-2 w-2 rounded-full ${config.apiKey ? 'bg-claude-success' : 'bg-claude-border'}`}></span>
+             <span className="text-xs font-medium text-claude-text-secondary">
                 {config.apiKey ? 'Key Provided' : 'No Key'}
              </span>
           </div>
@@ -150,7 +150,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, onChange, disabled })
           
           {/* Provider Selection */}
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">
+            <label className="text-xs font-medium text-claude-text-secondary uppercase tracking-wider ml-1">
               AI Provider
             </label>
             <div className="relative">
@@ -158,7 +158,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, onChange, disabled })
                 value={config.provider}
                 disabled={disabled}
                 onChange={(e) => onChange({ ...config, provider: e.target.value as AIProvider, apiKey: '', ollamaEndpoint: e.target.value === 'ollama' ? 'http://localhost:11434' : undefined, maxTokens: config.maxTokens || 4096, temperature: config.temperature ?? 0.3 })}
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none appearance-none transition-shadow cursor-pointer hover:bg-slate-100"
+                className="w-full pl-10 pr-4 py-3 bg-claude-bg border border-claude-border rounded-xl text-claude-text font-medium focus:ring-2 focus:ring-claude-orange focus:border-claude-orange outline-none appearance-none transition-all cursor-pointer hover:bg-claude-bg-alt"
               >
                 <option value="gemini">Google Gemini</option>
                 <option value="openai">OpenAI</option>
@@ -167,10 +167,10 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, onChange, disabled })
                 <option value="ollama">Ollama (Local)</option>
                 <option value="huggingface">HuggingFace</option>
               </select>
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-claude-text-secondary">
                 {getProviderIcon(config.provider)}
               </div>
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-claude-text-tertiary">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
@@ -181,13 +181,13 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, onChange, disabled })
           {/* Model Selection */}
           <div className="space-y-2">
             <div className="flex justify-between items-center">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">
+              <label className="text-xs font-medium text-claude-text-secondary uppercase tracking-wider ml-1">
                 Model
               </label>
               <button 
                 onClick={handleFetchModels}
                 disabled={!config.apiKey || isLoadingModels || disabled}
-                className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="text-xs text-claude-orange hover:text-claude-orange-dark font-medium flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                  {isLoadingModels ? (
                    <span className="animate-spin h-3 w-3 border-2 border-current border-t-transparent rounded-full"/>
@@ -204,7 +204,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, onChange, disabled })
                 value={config.model}
                 disabled={disabled}
                 onChange={(e) => onChange({ ...config, model: e.target.value })}
-                className="w-full pl-3 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none appearance-none transition-shadow cursor-pointer hover:bg-slate-100"
+                className="w-full pl-3 pr-10 py-3 bg-claude-bg border border-claude-border rounded-xl text-claude-text font-medium focus:ring-2 focus:ring-claude-orange focus:border-claude-orange outline-none appearance-none transition-all cursor-pointer hover:bg-claude-bg-alt"
               >
                 {availableModels.map((model) => (
                   <option key={model.id} value={model.id}>
@@ -212,7 +212,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, onChange, disabled })
                   </option>
                 ))}
               </select>
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-claude-text-tertiary">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
@@ -223,7 +223,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, onChange, disabled })
           {/* Ollama Endpoint (only for Ollama) */}
           {config.provider === 'ollama' && (
             <div className="md:col-span-2 space-y-2">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">
+              <label className="text-xs font-medium text-claude-text-secondary uppercase tracking-wider ml-1">
                 Ollama Endpoint
               </label>
               <input
@@ -232,21 +232,21 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, onChange, disabled })
                 disabled={disabled}
                 onChange={(e) => onChange({ ...config, ollamaEndpoint: e.target.value })}
                 placeholder="http://localhost:11434"
-                className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-slate-800 font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                className="w-full px-4 py-3 bg-claude-bg-alt border border-claude-border rounded-xl text-claude-text font-mono text-sm focus:ring-2 focus:ring-claude-orange focus:border-claude-orange outline-none transition-all"
               />
-              <p className="text-[10px] text-slate-400 ml-1">
-                Make sure Ollama is running with CORS enabled: <code className="bg-slate-100 px-1 rounded">OLLAMA_ORIGINS='*' ollama serve</code>
+              <p className="text-[11px] text-claude-text-tertiary ml-1">
+                Make sure Ollama is running with CORS enabled: <code className="bg-claude-bg px-1.5 py-0.5 rounded border border-claude-border font-mono">OLLAMA_ORIGINS='*' ollama serve</code>
               </p>
             </div>
           )}
 
           {/* API Key Input */}
           <div className="md:col-span-2 space-y-2">
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">
+            <label className="text-xs font-medium text-claude-text-secondary uppercase tracking-wider ml-1">
               {getApiKeyLabel(config.provider)}
             </label>
             <div className="relative group">
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-claude-text-tertiary group-focus-within:text-claude-orange transition-colors">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                 </svg>
@@ -265,34 +265,34 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, onChange, disabled })
                    }
                 }}
                 placeholder={getApiKeyPlaceholder(config.provider)}
-                className={`w-full pl-10 pr-24 py-2.5 bg-white border rounded-xl text-slate-800 font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all
-                  ${isKeyValid === true ? 'border-green-300 focus:border-green-500 focus:ring-green-200' : ''}
-                  ${isKeyValid === false ? 'border-red-300 focus:border-red-500 focus:ring-red-200' : ''}
-                  ${isKeyValid === null ? 'border-slate-300 focus:border-blue-500' : ''}
+                className={`w-full pl-10 pr-24 py-3 bg-claude-bg-alt border rounded-xl text-claude-text font-mono text-sm focus:ring-2 focus:ring-claude-orange outline-none transition-all
+                  ${isKeyValid === true ? 'border-claude-success focus:border-claude-success focus:ring-claude-success/20' : ''}
+                  ${isKeyValid === false ? 'border-claude-error focus:border-claude-error focus:ring-claude-error/20' : ''}
+                  ${isKeyValid === null ? 'border-claude-border focus:border-claude-orange' : ''}
                 `}
               />
               <div className="absolute right-2 top-1/2 -translate-y-1/2">
                 {isKeyValid === true && (
-                  <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-700">
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-claude-success/10 text-claude-success">
                     Verified
                   </span>
                 )}
                 {isKeyValid === false && (
-                  <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-700">
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-claude-error/10 text-claude-error">
                     Invalid
                   </span>
                 )}
                  {config.apiKey && isKeyValid === null && !isLoadingModels && config.provider !== 'ollama' && (
                    <button
                     onClick={handleFetchModels}
-                    className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded transition-colors"
+                    className="text-xs bg-claude-bg hover:bg-claude-border text-claude-text-secondary px-3 py-1.5 rounded-lg transition-colors border border-claude-border"
                    >
                      Verify
                    </button>
                  )}
               </div>
             </div>
-            <p className="text-[10px] text-slate-400 ml-1">
+            <p className="text-[11px] text-claude-text-tertiary ml-1">
               {config.provider === 'ollama' 
                 ? 'Ollama runs locally - no API key needed unless you configured authentication.'
                 : 'Your key is used directly in your browser to fetch models and generate content. It is never stored.'
@@ -301,18 +301,18 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, onChange, disabled })
           </div>
 
           {/* Advanced Parameters */}
-          <div className="md:col-span-2 pt-2 border-t border-slate-100">
-            <div className="flex items-center gap-2 mb-3">
-              <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="md:col-span-2 pt-4 border-t border-claude-border-subtle">
+            <div className="flex items-center gap-2 mb-4">
+              <svg className="w-4 h-4 text-claude-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
               </svg>
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Generation Parameters</span>
+              <span className="text-xs font-medium text-claude-text-secondary uppercase tracking-wider">Generation Parameters</span>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-slate-600 ml-1 flex justify-between">
+            <div className="grid grid-cols-2 gap-6">
+              <div className="space-y-3">
+                <label className="text-xs font-medium text-claude-text-secondary ml-1 flex justify-between">
                   <span>Max Tokens</span>
-                  <span className="text-slate-400 font-normal">{config.maxTokens || 4096}</span>
+                  <span className="text-claude-text-tertiary font-mono">{config.maxTokens || 4096}</span>
                 </label>
                 <input
                   type="range"
@@ -322,17 +322,17 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, onChange, disabled })
                   value={config.maxTokens || 4096}
                   disabled={disabled}
                   onChange={(e) => onChange({ ...config, maxTokens: parseInt(e.target.value) })}
-                  className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                  className="w-full h-2 bg-claude-border rounded-lg appearance-none cursor-pointer accent-claude-orange"
                 />
-                <div className="flex justify-between text-[10px] text-slate-400 px-1">
+                <div className="flex justify-between text-[10px] text-claude-text-tertiary px-1">
                   <span>1024</span>
                   <span>8192</span>
                 </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-slate-600 ml-1 flex justify-between">
+              <div className="space-y-3">
+                <label className="text-xs font-medium text-claude-text-secondary ml-1 flex justify-between">
                   <span>Temperature</span>
-                  <span className="text-slate-400 font-normal">{(config.temperature ?? 0.3).toFixed(1)}</span>
+                  <span className="text-claude-text-tertiary font-mono">{(config.temperature ?? 0.3).toFixed(1)}</span>
                 </label>
                 <input
                   type="range"
@@ -342,9 +342,9 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, onChange, disabled })
                   value={config.temperature ?? 0.3}
                   disabled={disabled}
                   onChange={(e) => onChange({ ...config, temperature: parseFloat(e.target.value) })}
-                  className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                  className="w-full h-2 bg-claude-border rounded-lg appearance-none cursor-pointer accent-claude-orange"
                 />
-                <div className="flex justify-between text-[10px] text-slate-400 px-1">
+                <div className="flex justify-between text-[10px] text-claude-text-tertiary px-1">
                   <span>Precise</span>
                   <span>Creative</span>
                 </div>
@@ -356,11 +356,11 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, onChange, disabled })
         
         {/* Info Banner for providers */}
         {config.provider !== 'gemini' && (
-           <div className={`px-6 py-3 border-t flex items-start gap-3 ${
-             config.provider === 'ollama' ? 'bg-blue-50 border-blue-100' : 'bg-amber-50 border-amber-100'
+           <div className={`px-6 py-4 border-t flex items-start gap-3 ${
+             config.provider === 'ollama' ? 'bg-claude-info/5 border-claude-info/20' : 'bg-claude-warning/5 border-claude-warning/20'
            }`}>
              <svg className={`w-5 h-5 shrink-0 mt-0.5 ${
-               config.provider === 'ollama' ? 'text-blue-500' : 'text-amber-500'
+               config.provider === 'ollama' ? 'text-claude-info' : 'text-claude-warning'
              }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                {config.provider === 'ollama' ? (
                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -371,29 +371,29 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, onChange, disabled })
              <div>
                {config.provider === 'ollama' ? (
                  <>
-                   <p className="text-xs font-medium text-blue-800">Local Processing</p>
-                   <p className="text-[11px] text-blue-700 mt-0.5">
-                     Ollama runs entirely on your machine. Make sure you have a model pulled (e.g., <code className="bg-blue-100 px-1 rounded">ollama pull llama3</code>).
+                   <p className="text-xs font-medium text-claude-info">Local Processing</p>
+                   <p className="text-[11px] text-claude-text-secondary mt-1 leading-relaxed">
+                     Ollama runs entirely on your machine. Make sure you have a model pulled (e.g., <code className="bg-claude-info/10 px-1.5 py-0.5 rounded font-mono text-claude-info">ollama pull llama3</code>).
                    </p>
                  </>
                ) : config.provider === 'groq' ? (
                  <>
-                   <p className="text-xs font-medium text-amber-800">Text-Only Processing</p>
-                   <p className="text-[11px] text-amber-700 mt-0.5">
+                   <p className="text-xs font-medium text-claude-warning">Text-Only Processing</p>
+                   <p className="text-[11px] text-claude-text-secondary mt-1 leading-relaxed">
                      Groq extracts text from PDFs locally. Scanned/image PDFs won't work well. For best results with complex papers, use <strong>Gemini</strong>.
                    </p>
                  </>
                ) : config.provider === 'huggingface' ? (
                  <>
-                   <p className="text-xs font-medium text-amber-800">Inference API Limits</p>
-                   <p className="text-[11px] text-amber-700 mt-0.5">
+                   <p className="text-xs font-medium text-claude-warning">Inference API Limits</p>
+                   <p className="text-[11px] text-claude-text-secondary mt-1 leading-relaxed">
                      HuggingFace Inference API has rate limits and some models may be slow to load. For production use, consider other providers.
                    </p>
                  </>
                ) : (
                  <>
-                   <p className="text-xs font-medium text-amber-800">Limited PDF Support</p>
-                   <p className="text-[11px] text-amber-700 mt-0.5">
+                   <p className="text-xs font-medium text-claude-warning">Limited PDF Support</p>
+                   <p className="text-[11px] text-claude-text-secondary mt-1 leading-relaxed">
                      {config.provider === 'openai' ? 'OpenAI (GPT-4o has vision support)' : 'Anthropic (Claude 3 has vision support)'} will try vision mode first, falling back to text extraction. For scanned PDFs, <strong>Gemini</strong> is recommended.
                    </p>
                  </>

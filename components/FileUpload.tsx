@@ -49,10 +49,10 @@ const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect, disabled }) => {
 
   return (
     <div
-      className={`relative p-8 w-full max-w-2xl mx-auto border-2 border-dashed rounded-xl transition-all duration-300 ease-in-out ${
+      className={`relative p-10 w-full max-w-2xl mx-auto border-2 border-dashed rounded-2xl transition-all duration-300 ease-in-out ${
         dragActive
-          ? "border-blue-500 bg-blue-50"
-          : "border-slate-300 bg-white hover:border-slate-400"
+          ? "border-claude-orange bg-claude-orange/5"
+          : "border-claude-border bg-claude-bg-alt hover:border-claude-text-tertiary hover:bg-claude-bg"
       } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
       onDragEnter={disabled ? undefined : handleDrag}
       onDragLeave={disabled ? undefined : handleDrag}
@@ -68,25 +68,25 @@ const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect, disabled }) => {
         disabled={disabled}
       />
       
-      <div className="flex flex-col items-center justify-center text-center space-y-4">
-        <div className="p-4 bg-slate-100 rounded-full">
-          <svg className="w-8 h-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <div className="flex flex-col items-center justify-center text-center space-y-5">
+        <div className="p-4 bg-claude-bg rounded-2xl border border-claude-border shadow-soft">
+          <svg className="w-8 h-8 text-claude-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
         </div>
         <div>
-          <h3 className="text-lg font-semibold text-slate-900">Upload Research Paper</h3>
-          <p className="text-slate-500 mt-1 text-sm">Drag & drop your PDF here, or click to browse</p>
+          <h3 className="text-lg font-semibold text-claude-text">Upload Research Paper</h3>
+          <p className="text-claude-text-secondary mt-1.5 text-sm">Drag & drop your PDF here, or click to browse</p>
         </div>
         <button
           type="button"
           onClick={onButtonClick}
           disabled={disabled}
-          className="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          className="px-5 py-2.5 text-sm font-medium text-claude-orange bg-claude-orange/10 rounded-xl hover:bg-claude-orange/20 transition-colors focus:outline-none focus:ring-2 focus:ring-claude-orange focus:ring-offset-2 border border-claude-orange/20"
         >
           Select PDF
         </button>
-        <p className="text-xs text-slate-400">PDFs up to 10MB recommended</p>
+        <p className="text-xs text-claude-text-tertiary">PDFs up to 10MB recommended</p>
       </div>
     </div>
   );
